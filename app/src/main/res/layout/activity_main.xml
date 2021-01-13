@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/activity_main_lay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@mipmap/img_main_bg_1">
+
+    <!--每日必应一图-->
+    <ImageView
+        android:id="@+id/bing_pic_img"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop" />
+
+    <androidx.drawerlayout.widget.DrawerLayout
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        android:id="@+id/drawer_layout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="right">
+            <LinearLayout
+                android:orientation="vertical"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fitsSystemWindows="true">
+
+                <!--扫描歌曲的布局-->
+                <include layout="@layout/music_scan"/>
+
+                <!--音乐播放界面-->
+                <include layout="@layout/activity_music_player"/>
+
+                <!--Toolbar-->
+                <include layout="@layout/title_toolbar"/>
+
+                <!--播放内容-->
+                <include layout="@layout/music_text"/>
+
+                <!--歌曲的展示列表,都什么年代了，你还在用ListView吗？-->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rv_music"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <!--底部歌曲播放控制布局-->
+                <include layout="@layout/music_control"/>
+
+            </LinearLayout>
+
+        <!--滑动菜单碎片-->
+<!--        <include layout="@layout/music_fragment"/>-->
+        <fragment
+            android:id="@+id/choose_music_fragment"
+            android:name="com.llw.music.MusicListActivity"
+            android:layout_width="@dimen/dp_400"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"/>
+
+    </androidx.drawerlayout.widget.DrawerLayout>
+
+</FrameLayout>
