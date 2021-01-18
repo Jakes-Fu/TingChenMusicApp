@@ -2,18 +2,12 @@ package com.llw.music;
 
 import android.media.MediaPlayer;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.SeekBar;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.drawerlayout.widget.DrawerLayout;
 import android.app.Fragment;
@@ -21,17 +15,14 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.chad.library.adapter.base.BaseQuickAdapter;
+import com.chad.library.adapter.base.BaseViewHolder;
 import com.llw.music.adapter.ChooseMusicListAdapter;
 import com.llw.music.model.Song;
+import com.llw.music.service.MyApplication;
 import com.llw.music.utils.MusicUtils;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
-import butterknife.ButterKnife;
-
-import static com.llw.music.utils.DateUtil.parseTime;
 
 
 public class MusicListActivity extends Fragment implements MediaPlayer.OnCompletionListener {
@@ -40,7 +31,7 @@ public class MusicListActivity extends Fragment implements MediaPlayer.OnComplet
     private static final int INTERNAL_TIME = 1000;
     private ArrayAdapter<String> adapter;
     private List<String> dataList = new ArrayList<>();
-    private ChooseMusicListAdapter Adapter;//歌曲适配器
+    public ChooseMusicListAdapter Adapter;//歌曲适配器
     private List<Song> mList;
     private RecyclerView listView;
     private LinearLayout musicList;
@@ -52,14 +43,13 @@ public class MusicListActivity extends Fragment implements MediaPlayer.OnComplet
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.choose_music_item, container, false);
-
         listView = (RecyclerView) view.findViewById(R.id.list_view);
         musicList = (LinearLayout) view.findViewById(R.id.music_list_item);
         chooseMusicList = (LinearLayout) view.findViewById(R.id.choose_music_list);
         titleView = (TextView) view.findViewById(R.id.list_title);
         chooseMusic = (DrawerLayout) view.findViewById(R.id.drawer_layout);
 
-        initMusic();
+        initMusicList();
         mList = new ArrayList<>();//实例化
         //数据赋值
         mList = MusicUtils.getMusicData(MyApplication.getContext());//将扫描到的音乐赋值给播放列表
@@ -70,7 +60,7 @@ public class MusicListActivity extends Fragment implements MediaPlayer.OnComplet
         return view;
     }
 
-    public void initMusic(){
+    public void initMusicList(){
         mList = new ArrayList<>();//实例化
         //数据赋值
         mList = MusicUtils.getMusicData(MyApplication.getContext());//将扫描到的音乐赋值给播放列表
@@ -78,16 +68,38 @@ public class MusicListActivity extends Fragment implements MediaPlayer.OnComplet
         listView.setLayoutManager(new LinearLayoutManager(MyApplication.getContext()));
         listView.setAdapter(Adapter);
 
+        MainActivity mainActivity = (MainActivity) getActivity();
+        Adapter.setItemSelectedCallBack(new ChooseMusicListAdapter.ItemSelectedCallBack() {
+            @Override
+            public void convert(BaseViewHolder holder, int position) {
+                TextView list_item_play_or_pause = holder.getView(R.id.list_item_play_or_pause);
+                if (mainActivity.changeTextColor == true){
+                    if (mainActivity.mCurrentPosition == position && mainActivity.playMusic == true){
+                        list_item_play_or_pause.setText("播放中");
+                    }else if (mainActivity.mCurrentPosition == position && mainActivity.playMusic == false){
+                        list_item_play_or_pause.setText("暂停");
+                    }else {
+                        list_item_play_or_pause.setText("");
+                    }
+                }else {
+                    list_item_play_or_pause.setText("");
+                }
+            }
+        });
+
         /**
          * 1.与mainActivity进行通信
          * 2.获取播放位置，调用changeMusic（）方法
          * 3.逻辑操作与mainActivity中点击歌曲的方法相同
          * */
-        MainActivity mainActivity = (MainActivity) getActivity();
+
         Adapter.setOnItemChildClickListener(new BaseQuickAdapter.OnItemChildClickListener() {
             @Override
             public void onItemChildClick(BaseQuickAdapter adapter, View view, int position) {
                 if (view.getId() == R.id.music_list_item){
+                    mainActivity.changeTextColor = true;
+                    mainActivity.mAdapter.notifyDataSetChanged();
+                    Adapter.notifyDataSetChanged();
                     mainActivity.musicSeekBarControl.setVisibility(View.VISIBLE);
                     if (mainActivity.playMusic == false && mainActivity.firstClick == true){
                         mainActivity.mCurrentPosition = position;

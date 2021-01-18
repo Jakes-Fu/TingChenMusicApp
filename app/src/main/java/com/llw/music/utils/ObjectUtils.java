@@ -14,7 +14,8 @@ import java.lang.reflect.Array;
 import java.util.Collection;
 import java.util.Map;
 
-
+/**
+ * 对象工具类  用于判空*/
 public final class ObjectUtils {
 
     private ObjectUtils() {

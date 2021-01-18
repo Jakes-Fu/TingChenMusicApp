@@ -7,7 +7,7 @@ import android.content.SharedPreferences;
  * sharepref工具类
  */
 public class SPUtils {
-    private static final String NAME="config";
+    private static final String NAME = "config";
     public static void putBoolean(String key, boolean value, Context context) {
         SharedPreferences sp = context.getSharedPreferences(NAME,
                 Context.MODE_PRIVATE);

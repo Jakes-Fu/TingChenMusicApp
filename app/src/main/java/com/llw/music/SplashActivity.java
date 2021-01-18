@@ -1,28 +1,20 @@
 package com.llw.music;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.databinding.DataBindingUtil;
+import androidx.multidex.MultiDex;
 
 import android.Manifest;
-import android.app.Activity;
-import android.content.DialogInterface;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Looper;
-import android.util.Log;
-import android.view.View;
 import android.view.WindowManager;
-import android.view.animation.Animation;
 import android.view.animation.TranslateAnimation;
-import android.widget.TextView;
-import android.widget.Toast;
 
-import com.llw.music.databinding.ActivitySplashBinding;
+import com.llw.music.service.MyApplication;
 
 import static java.lang.Thread.sleep;
 
@@ -49,36 +41,43 @@ public class SplashActivity extends AppCompatActivity {
                             "android.permission.WRITE_EXTERNAL_STORAGE"};
                     if (Build.VERSION.SDK_INT >= 23){
                         if (ContextCompat.checkSelfPermission(MyApplication.getContext(),
-                                Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED){
-                            if (ActivityCompat.shouldShowRequestPermissionRationale(SplashActivity.this,
-                                    Manifest.permission.WRITE_EXTERNAL_STORAGE)){
-                                AlertDialog.Builder builder=new AlertDialog.Builder(MyApplication.getContext());
-                                builder.setCancelable(false)
-                                        .setMessage("需要授予权限")
-                                        .setNegativeButton("取消", new DialogInterface.OnClickListener() {
-                                            @Override
-                                            public void onClick(DialogInterface dialog, int which) {
-                                                Toast.makeText(MyApplication.getContext(),"点击了取消按钮",Toast.LENGTH_LONG).show();
-                                            }
-                                        })
-                                        .setPositiveButton("确定", new DialogInterface.OnClickListener() {
-                                            @Override
-                                            public void onClick(DialogInterface dialog, int which) {
-                                                ActivityCompat.requestPermissions(SplashActivity.this, PERMISSIONS_STORAGE, 1);
-                                            }
-                                        }).show();
-                            }else {
-                                ActivityCompat.requestPermissions(SplashActivity.this, PERMISSIONS_STORAGE, 1);
-                            }
+                                Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                                || ContextCompat.checkSelfPermission(MyApplication.getContext(),
+                                Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED){
+//                            if (ActivityCompat.shouldShowRequestPermissionRationale(SplashActivity.this,
+//                                    new String())){
+//                                AlertDialog.Builder builder=new AlertDialog.Builder(MyApplication.getContext());
+//                                builder.setCancelable(false)
+//                                        .setMessage("需要授予权限")
+//                                        .setNegativeButton("取消", new DialogInterface.OnClickListener() {
+//                                            @Override
+//                                            public void onClick(DialogInterface dialog, int which) {
+//                                                Toast.makeText(MyApplication.getContext(),"点击了取消按钮",Toast.LENGTH_LONG).show();
+//                                            }
+//                                        })
+//                                        .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+//                                            @Override
+//                                            public void onClick(DialogInterface dialog, int which) {
+//                                                ActivityCompat.requestPermissions(SplashActivity.this, PERMISSIONS_STORAGE, 1);
+//                                            }
+//                                        }).show();
+//                            }
+//                            else {
+//                                ActivityCompat.requestPermissions(SplashActivity.this, PERMISSIONS_STORAGE, 1);
+//                            }
+                            ActivityCompat.requestPermissions(SplashActivity.this, new String[]{
+                                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                                    Manifest.permission.READ_EXTERNAL_STORAGE }, 1);
                         }else {
                             Intent intent = new Intent(SplashActivity.this,MainActivity.class);
                             startActivity(intent);
                             finish();
                         }
+                    }else {
+                        Intent intent = new Intent(SplashActivity.this,MainActivity.class);
+                        startActivity(intent);
+                        finish();
                     }
-//                    Intent intent = new Intent(SplashActivity.this,MainActivity.class);
-//                    startActivity(intent);
-//                    finish();
                 }catch (Exception e){
                     e.printStackTrace();
                 }
@@ -103,6 +102,10 @@ public class SplashActivity extends AppCompatActivity {
                 }
                 break;
         }
+    }
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        MultiDex.install(this);
     }
     /**
      * 初始化

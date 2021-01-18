@@ -72,7 +72,6 @@ public class DateUtil {
     //将时间字符串转为时间戳字符串
     public static String getStringTimestamp(String time) {
         String timestamp = null;
-
         try {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             Long longTime = sdf.parse(time).getTime()/1000;
@@ -84,7 +83,7 @@ public class DateUtil {
         return timestamp;
     }
 
-    //将长整型时间转为为分秒
+    //将长整型时间转为分秒
     public static String time(long millionSeconds) {
         SimpleDateFormat simpleDateFormat = new SimpleDateFormat("mm:ss");
         Calendar c = Calendar.getInstance();
@@ -98,7 +97,6 @@ public class DateUtil {
 
     public static String stringForTime(int timeMs) {
         int totalSeconds = timeMs / 1000;
-
         int seconds = totalSeconds % 60;
         int minutes = (totalSeconds / 60) % 60;
         int hours = totalSeconds / 3600;

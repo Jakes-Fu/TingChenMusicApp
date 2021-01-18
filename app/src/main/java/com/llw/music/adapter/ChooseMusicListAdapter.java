@@ -13,6 +13,16 @@ import java.util.List;
 
 public class ChooseMusicListAdapter extends BaseQuickAdapter<Song, BaseViewHolder> {
 
+    private ChooseMusicListAdapter.ItemSelectedCallBack mCallBack;
+
+    public void setItemSelectedCallBack(ChooseMusicListAdapter.ItemSelectedCallBack CallBack) {
+        this.mCallBack = CallBack;
+    }
+
+    public interface ItemSelectedCallBack {
+        void convert(BaseViewHolder holder, int position);
+    }
+
     public ChooseMusicListAdapter(int layoutResId, @Nullable List<Song> data) {
         super(layoutResId, data);
     }
@@ -23,6 +33,10 @@ public class ChooseMusicListAdapter extends BaseQuickAdapter<Song, BaseViewHolde
         int duration = item.duration;
         String time = MusicUtils.formatTime(duration);
 
+        if (mCallBack != null) {
+            mCallBack.convert(helper,helper.getLayoutPosition());
+        }
+
         helper.setText(R.id.tv_song_name, item.getSong().trim())//歌曲名称
                 .setText(R.id.tv_singer, item.getSinger())//+" - "+item.getAlbum())//歌手 - 专辑
                 //.setText(R.id.tv_duration_time,time)//歌曲时间
@@ -30,7 +44,6 @@ public class ChooseMusicListAdapter extends BaseQuickAdapter<Song, BaseViewHolde
                 //是因为位置和1都是整数类型，直接赋值给TextView会报错，故而拼接了""
                 .setText(R.id.tv_position, helper.getAdapterPosition() + 1 + "");
         helper.addOnClickListener(R.id.music_list_item);//给item添加点击事件，点击之后传递数据到播放页面或者在本页面进行音乐播放
-
     }
 
 }

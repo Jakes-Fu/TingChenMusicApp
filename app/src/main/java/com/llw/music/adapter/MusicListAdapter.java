@@ -1,27 +1,55 @@
 package com.llw.music.adapter;
+import android.content.ClipData;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.AdapterView;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.chad.library.adapter.base.BaseQuickAdapter;
 import com.chad.library.adapter.base.BaseViewHolder;
+import com.llw.music.MainActivity;
 import com.llw.music.R;
 import com.llw.music.model.Song;
 import com.llw.music.utils.MusicUtils;
 
+import java.util.Collections;
 import java.util.List;
 
+import butterknife.OnItemSelected;
+
+import static androidx.recyclerview.widget.RecyclerView.*;
+
 public class MusicListAdapter extends BaseQuickAdapter<Song, BaseViewHolder>{
+
+    private ItemSelectedCallBack mCallBack;
+
+    public void setItemSelectedCallBack(ItemSelectedCallBack CallBack) {
+        this.mCallBack = CallBack;
+    }
+
+    public interface ItemSelectedCallBack {
+        void convert(BaseViewHolder holder, int position);
+    }
 
     public MusicListAdapter(int layoutResId, @Nullable List<Song> data) {
         super(layoutResId, data);
     }
-
 
     @Override
     protected void convert(BaseViewHolder helper, Song item) {
         //给控件赋值
         int duration = item.duration;
         String time = MusicUtils.formatTime(duration);
+
+        if (mCallBack != null) {
+            mCallBack.convert(helper,helper.getLayoutPosition());
+        }
 
         helper.setText(R.id.tv_song_name,item.getSong().trim())//歌曲名称
                 .setText(R.id.tv_singer,item.getSinger()+" - "+item.getAlbum())//歌手 - 专辑
@@ -32,4 +60,5 @@ public class MusicListAdapter extends BaseQuickAdapter<Song, BaseViewHolder>{
         helper.addOnClickListener(R.id.item_music);//给item添加点击事件，点击之后传递数据到播放页面或者在本页面进行音乐播放
 
     }
+
 }

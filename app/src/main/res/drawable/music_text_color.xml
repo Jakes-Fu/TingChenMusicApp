@@ -3,7 +3,7 @@
     <item android:id="@android:id/background">
         <shape>
             <corners android:radius="10dp" />
-            <solid android:color="#B6C4F9" />
+            <solid android:color="@color/holo_blue_light" />
         </shape>
     </item>
 
@@ -11,7 +11,7 @@
         <clip>
             <shape>
                 <corners android:radius="10dp" />
-                <solid android:color="#B6C4F9" />
+                <solid android:color="@color/holo_blue_light" />
             </shape>
         </clip>
     </item>
@@ -20,7 +20,7 @@
         <clip>
             <shape>
                 <corners android:radius="10dp" />
-                <solid android:color="#7D95F3" />
+                <solid android:color="@color/holo_blue_light" />
             </shape>
         </clip>
     </item>

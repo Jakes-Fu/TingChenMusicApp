@@ -1,16 +1,15 @@
 package com.llw.music;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.icu.text.Transliterator;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
@@ -19,24 +18,19 @@ import android.os.IBinder;
 import android.os.Message;
 import android.preference.PreferenceManager;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Adapter;
 import android.widget.Button;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ListAdapter;
+import android.widget.ListView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.multidex.MultiDex;
@@ -45,10 +39,13 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.chad.library.adapter.base.BaseQuickAdapter;
+import com.chad.library.adapter.base.BaseViewHolder;
 import com.llw.music.adapter.ChooseMusicListAdapter;
 import com.llw.music.adapter.MusicListAdapter;
 import com.llw.music.model.Song;
+import com.llw.music.service.ActivityCollector;
 import com.llw.music.service.MusicService;
+import com.llw.music.service.MyApplication;
 import com.llw.music.utils.Constant;
 import com.llw.music.utils.HttpUtil;
 import com.llw.music.utils.MusicUtils;
@@ -143,15 +140,10 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
     TextView musicInfo;
 
     private static final String TAG = "MainActivity";
-    /**
-    * 绑定服务及通知栏*/
-//    private MusicService.MusicBinder musicBinder;
-//    private MusicService musicService;
 
     /**
      * 播放界面所需变量*/
-    private ChooseMusicListAdapter adapter;//歌曲列表适配器
-    private MusicListAdapter mAdapter;//歌曲适配器
+    public MusicListAdapter mAdapter;//歌曲适配器
     private List<Song> mList;//歌曲列表
     private RxPermissions rxPermissions;//权限请求
     private String musicData = null;
@@ -169,9 +161,36 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
     public MediaPlayer mediaPlayer;//音频播放器
     public ImageView btnPlayOrPause;
 
-    // 记录当前播放歌曲的位置
-    public int mCurrentPosition;
+    /**
+     * 播放主页面所需相关变量*/
+    public boolean changeTextColor = false;//控制文字颜色变化
+    public int mCurrentPosition; // 记录当前播放歌曲的位置
     private static final int INTERNAL_TIME = 1000;// 音乐进度间隔时间
+    private int changeCount = 0;
+
+    /**
+     * 绑定服务及通知栏*/
+    private MusicService.MusicBinder musicBinder;
+    private MusicService musicService;
+
+    /**
+     * 通知栏相关布局*/
+    private int listPosition = 0;
+
+
+    private ServiceConnection connection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            musicBinder = (MusicService.MusicBinder) service;
+            musicService = musicBinder.getService();
+            Log.d(TAG,"活动与服务已连接");
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            musicBinder = null;
+        }
+    };
 
     private Handler mHandler = new Handler(new Handler.Callback() {
         @Override
@@ -193,7 +212,7 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         /**
-         *判断android系统是否在5.0(版本号大于等于21)及以上；若满足，则调用app与系统状态栏融为一体；反之...
+         *判断android系统是否在5.0(版本号大于等于21)及以上；若满足，则调用app与系统状态栏融为一体
          * */
         if (Build.VERSION.SDK_INT >= 21){
             View decorView = getWindow().getDecorView();
@@ -205,14 +224,19 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
         setContentView(R.layout.activity_main);
 
         btnPlayOrPause = (ImageView) findViewById(R.id.btn_play_or_pause);
-        ActivityCollector.addActivity(this);//将当前活动添加到活动管理器中
+
+        /**
+         * 绑定服务*/
+        Intent serviceIntent = new Intent(MyApplication.getContext(),MusicService.class);
+        bindService(serviceIntent, connection, BIND_AUTO_CREATE);
+
         ButterKnife.bind(this);
         StatusBarUtil.StatusBarLightMode(this);
         rxPermissions = new RxPermissions(this);//使用前先实例化
-//        timeSeekBar.setOnSeekBarChangeListener(seekBarChangeListener);//滑动条监听
+
         musicTimeSeekBar.setOnSeekBarChangeListener(seekBarChangeListener);
         musicData = SPUtils.getString(Constant.MUSIC_DATA_FIRST, "yes", this);
-//        musicPlayOrPause = (ImageView) findViewById(R.id.music_play_or_pause);
+
 
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         String bingPic = prefs.getString("bing_pc",null);//加载每日必应一图，如果初始化没有图片则执行loadBIngPic；若有，则刷新
@@ -241,20 +265,19 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
                     }
                 });
     }
-
     //获取音乐列表
     private void initMusic() {
         mList = new ArrayList<>();//歌曲列表实例化
         musicPlayer.setVisibility(View.GONE);
-        scanLay.setVisibility(View.VISIBLE);
-        back_btn.setVisibility(View.VISIBLE);
+        scanLay.setVisibility(View.GONE);
+        back_btn.setVisibility(View.GONE);
 
         //数据赋值
         mList = MusicUtils.getMusicData(this);//将扫描到的音乐赋值给音乐列表
         if (!ObjectUtils.isEmpty(mList) && mList != null) {
             scanLay.setVisibility(View.GONE);
             SPUtils.putString(Constant.MUSIC_DATA_FIRST, "null", this);
-        }else {
+        }else if (mList == null){
             scanLay.setVisibility(View.GONE);
             btnPlayOrPause.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -266,29 +289,28 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
                 @Override
                 public void onClick(View v) {
                     Toast.makeText(MyApplication.getContext(),"没有扫描到歌曲",Toast.LENGTH_SHORT).show();
-
                 }
             });
             musicBtnPlayOrPause.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     Toast.makeText(MyApplication.getContext(),"没有扫描到歌曲",Toast.LENGTH_SHORT).show();
-
                 }
             });
             musicBtnNext.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     Toast.makeText(MyApplication.getContext(),"没有扫描到歌曲",Toast.LENGTH_SHORT).show();
-
                 }
             });
         }
 
-        adapter = new ChooseMusicListAdapter(R.layout.choose_music,mList);
         mAdapter = new MusicListAdapter(R.layout.item_music_rv_list, mList);//指定适配器的布局和数据源
+
         //线性布局管理器，可以设置横向还是纵向，RecyclerView默认是纵向的，所以不用处理,如果不需要设置方向，代码还可以更加的精简如下
         rvMusic.setLayoutManager(new LinearLayoutManager(this));
+        //设置适配器
+        rvMusic.setAdapter(mAdapter);
 
         /**
          * 如果需要设置方向显示，则将下面代码注释去掉即可
@@ -297,16 +319,61 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
 //        manager.setOrientation(RecyclerView.HORIZONTAL);
 //        rvMusic.setLayoutManager(manager);
 
-        //设置适配器
-        rvMusic.setAdapter(mAdapter);
+        /**
+         * 回调musicItem里的文字颜色和播放状态
+         */
+        mAdapter.setItemSelectedCallBack(new MusicListAdapter.ItemSelectedCallBack() {
+
+            @Override
+            public void convert(BaseViewHolder holder, int position) {
+//                View bg = holder.getView(R.id.item_music);
+                TextView music_play_or_pause = holder.getView(R.id.music_play_or_pause);
+                TextView tv_position = holder.getView(R.id.tv_position);
+                TextView tv_song_name = holder.getView(R.id.tv_song_name);
+                TextView tv_singer = holder.getView(R.id.tv_singer);
+                TextView tv_duration_time = holder.getView(R.id.tv_duration_time);
+                if (changeTextColor == true){
+                    if (mCurrentPosition == position && playMusic == true){
+//                        bg.setBackgroundResource(R.drawable.music_text_color);
+                        music_play_or_pause.setText("播放中");
+                        music_play_or_pause.setTextColor(R.drawable.music_text_color);
+                        tv_position.setTextColor(R.drawable.music_text_color);
+                        tv_song_name.setTextColor(R.drawable.music_text_color);
+                        tv_singer.setTextColor(R.drawable.music_text_color);
+                        tv_duration_time.setTextColor(R.drawable.music_text_color);
+                    }else if (mCurrentPosition == position && playMusic == false){
+//                        bg.setBackgroundResource(R.color.color_transparent_10);
+                        music_play_or_pause.setText("暂停");
+                        music_play_or_pause.setTextColor(R.drawable.music_text_color);
+                        tv_position.setTextColor(R.drawable.music_text_color);
+                        tv_song_name.setTextColor(R.drawable.music_text_color);
+                        tv_singer.setTextColor(R.drawable.music_text_color);
+                        tv_duration_time.setTextColor(R.drawable.music_text_color);
+                    }else{
+//                        bg.setBackgroundResource(R.drawable.music_text_color);
+                        music_play_or_pause.setText("");
+                        music_play_or_pause.setTextColor(Color.WHITE);
+                        tv_position.setTextColor(Color.WHITE);
+                        tv_song_name.setTextColor(Color.WHITE);
+                        tv_singer.setTextColor(Color.WHITE);
+                        tv_duration_time.setTextColor(Color.WHITE);
+                    }
+                }else {
+//                    bg.setBackgroundResource(R.color.color_transparent_10);
+                    music_play_or_pause.setText("");
+                    music_play_or_pause.setTextColor(Color.WHITE);
+                    tv_position.setTextColor(Color.WHITE);
+                    tv_song_name.setTextColor(Color.WHITE);
+                    tv_singer.setTextColor(Color.WHITE);
+                    tv_duration_time.setTextColor(Color.WHITE);
+                }
+            }
+        });
 
         /**
-         * 1.与MusicListActivity进行通信
-         * 2.调用该碎片中的initMusic方法，实现在播放队列中的点击事件 */
-        MusicListActivity musicListActivity = (MusicListActivity) getFragmentManager().findFragmentById(R.id.choose_music_fragment);
-        musicListActivity.initMusic();
-
-        //item的点击事件
+         * 必要要在这先调用useMusicListActivity，才能够开启活动于碎片之间的通信
+         * */
+        useMusicListActivity();
         mAdapter.setOnItemChildClickListener(new BaseQuickAdapter.OnItemChildClickListener() {
             @Override
             public void onItemChildClick(BaseQuickAdapter adapter, View view, int position) {
@@ -314,9 +381,9 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
                  * 点击歌曲进行切歌、播放、暂停的操作
                  * */
                 if (view.getId() == R.id.item_music) {
-//                    mCurrentPosition = position;
-//                    changeMusic(mCurrentPosition);
-
+                    changeTextColor = true;
+                    mAdapter.notifyDataSetChanged();
+                    useMusicListActivity();//
                     if (playMusic == false && firstClick == true){//初始化app，点击任意一首歌曲的操作
                         mCurrentPosition = position;
                         changeMusic(mCurrentPosition);
@@ -356,18 +423,24 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
             }
         });
         initStyle();//设置背景样式
-
     }
     private void initStyle() {
         musicInfo.setVisibility(View.VISIBLE);
-
         chooseMusic.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);//关闭手势滑动
-
         Glide.with(this).load(R.mipmap.icon_empty).into(albumImg);//使用Glide动态加载初始化专辑图片
-
         tvTitle.setTextColor(getResources().getColor(R.color.white));//文字变白色
-//        tvClearList.setTextColor(getResources().getColor(R.color.white));
         StatusBarUtil.transparencyBar(this);
+    }
+
+    /**
+     * 1.与MusicListActivity进行通信
+     * 2.调用该碎片中的initMusic方法，实现在播放队列中的点击事件
+     * 3.更新MusicListActivity的适配器,实现在适配器中显示歌曲播放状态
+     * */
+    public void useMusicListActivity(){
+        MusicListActivity musicListActivity = (MusicListActivity) getFragmentManager().findFragmentById(R.id.choose_music_fragment);
+        musicListActivity.initMusicList();
+        musicListActivity.Adapter.notifyDataSetChanged();
     }
 
     @OnClick({R.id.change_background,R.id.btn_scan,  R.id.btn_play_or_pause,R.id.back_btn,R.id.list_title,
@@ -376,26 +449,20 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
             R.id.player_music_model})
     public void onViewClicked(View view) {
         switch (view.getId()) {
-            case R.id.list_title:
-                chooseMusic.closeDrawers();
-                break;
             case R.id.change_background:
-                btnClose.setVisibility(View.VISIBLE);
-                /**
-                 * 这一段if（i == 1）由于逻辑修改不过来，所以只能设置当更换背景时暂停播放 (已解决)*/
+                changeCount++;
+                if (changeCount >= 10){
+                    back_btn.setVisibility(View.VISIBLE);
+                }else {
+                    back_btn.setVisibility(View.GONE);
+                }
                 if (i == 1) {       //播放中更换背景
                     if (changeBackground == true && mediaPlayer.isPlaying()) {
-//                        mediaPlayer.start();
-//                        tvPlaySongInfo.setSelected(true);
                         mainLay.setBackground(getResources().getDrawable(R.mipmap.img_main_bg));
-//                        playStateImg.setBackground(getResources().getDrawable(R.mipmap.icon_play));
                         btnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
                         changeBackground = false;
                     }else if (changeBackground == false && mediaPlayer.isPlaying()){
-//                        mediaPlayer.start();
-//                        tvPlaySongInfo.setSelected(true);
                         mainLay.setBackground(getResources().getDrawable(R.mipmap.img_main_bg_1));
-//                        playStateImg.setBackground(getResources().getDrawable(R.mipmap.icon_play));
                         btnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
                         changeBackground = true;
                     }else if (changeBackground == true && playMusic == false){
@@ -419,28 +486,24 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
             case R.id.btn_scan://扫描本地歌曲
                 permissionRequest();
                 scanLay.setVisibility(View.GONE);
-//                back_btn.setVisibility(View.GONE);
+                changeCount = 0;
                 break;
             case R.id.back_btn:
 //                ActivityCollector.finishAll();
-//                Intent intent = getIntent();
-//                boolean isFirstInto = intent.getBooleanExtra("extra_FirstInto",true);
-//                Log.d("MainActivity", String.valueOf(isFirstInto));
-
                 scanLay.setVisibility(View.VISIBLE);
                 back_btn.setVisibility(View.GONE);
                 break;
-//            case R.id.btn_previous://上一曲
-//                changeMusic(--mCurrentPosition);//当前歌曲位置减1
-//                break;
             case R.id.btn_play_or_pause://播放或者暂停
                 // 首次点击播放按钮，默认播放第0首，下标从0开始
+                changeTextColor = true;
+                mAdapter.notifyDataSetChanged();
+                useMusicListActivity();
                 if (mediaPlayer == null) {
-//                    tvPlaySongInfo.setSelected(true);//跑马灯效果
-//                    playStateLay.setVisibility(View.VISIBLE);
                     musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
                     changeMusic(0);
                     musicSeekBarControl.setVisibility(View.VISIBLE);
+                    firstClick = false;
+                    playMusic = true;
                     i = 1;
                 } else {
                     if (mediaPlayer.isPlaying()) {
@@ -450,9 +513,7 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
                         playMusic = false;
                     } else {
                         mediaPlayer.start();
-//                        playStateLay.setVisibility(View.VISIBLE);
                         btnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
-//                        playStateImg.setBackground(getResources().getDrawable(R.mipmap.icon_play));
                         musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
                         playMusic = true;
                     }
@@ -460,6 +521,9 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
                 break;
             case R.id.selected_music_list:
                 chooseMusic.openDrawer(GravityCompat.START);//打开drawlayout滑动菜单
+                break;
+            case R.id.list_title:
+                chooseMusic.closeDrawers();
                 break;
             case R.id.btn_close:
                 chooseMusic.closeDrawers();
@@ -470,39 +534,51 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
             case R.id.show_music_info:
                 musicPlayer.setVisibility(View.VISIBLE);
                 break;
-                /**
-                 * 这里开始都是musicPlayer界面的逻辑操作
-                 * */
+            /**
+             * 这里开始都是musicPlayer界面的逻辑操作
+             * */
             case R.id.music_btn_back:
                 musicPlayer.setVisibility(View.GONE);
                 break;
             case R.id.music_btn_previous:
+                changeTextColor = true;
+                mAdapter.notifyDataSetChanged();
+                useMusicListActivity();
+                playMusic = true;
                 musicSeekBarControl.setVisibility(View.VISIBLE);
-                if (playModel == PLAY_IN_ORDER){
+                if (mediaPlayer == null){
                     changeMusic(--mCurrentPosition);
-                }else if (playModel == PLAY_RANDOM){
-                    mCurrentPosition = (mCurrentPosition + (int)(1+Math.random()*(20-1+1)))%11;
-                    changeMusic(mCurrentPosition);
-                }else if (playModel == PLAY_SINGLE){
-                    changeMusic(mCurrentPosition);
+                    firstClick = false;
+                }else {
+                    if (playModel == PLAY_IN_ORDER){
+                        changeMusic(--mCurrentPosition);
+                    }else if (playModel == PLAY_RANDOM){
+                        mCurrentPosition = (mCurrentPosition + (int)(1+Math.random()*(20-1+1)))%11;
+                        changeMusic(mCurrentPosition);
+                    }else if (playModel == PLAY_SINGLE){
+                        changeMusic(mCurrentPosition);
+                    }
                 }
                 break;
             case R.id.music_btn_play_or_pause:
                 // 首次点击播放按钮，默认播放第0首，下标从0开始
+                mAdapter.notifyDataSetChanged();
+                useMusicListActivity();
                 if (mediaPlayer == null) {
+                    changeTextColor = true;
                     changeMusic(0);
                     musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
                     musicSeekBarControl.setVisibility(View.VISIBLE);
+                    firstClick = false;
+                    playMusic = true;
                 } else {
                     if (mediaPlayer.isPlaying()) {
-                        mediaPlayer.pause();
-//                        playStateImg.setBackground(getResources().getDrawable(R.mipmap.icon_pause));
+                        mediaPlayer.pause();;
                         btnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_pause));
                         musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_pause));
                         playMusic = false;
                     } else {
                         mediaPlayer.start();
-//                        playStateImg.setBackground(getResources().getDrawable(R.mipmap.icon_play));
                         btnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
                         musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
                         playMusic = true;
@@ -510,15 +586,24 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
                 }
                 break;
             case R.id.music_btn_next:
+                changeTextColor = true;
+                mAdapter.notifyDataSetChanged();
+                useMusicListActivity();
                 musicSeekBarControl.setVisibility(View.VISIBLE);
-                if (playModel == PLAY_IN_ORDER){
+                if (mediaPlayer == null){
                     changeMusic(++mCurrentPosition);
-                }else if (playModel == PLAY_RANDOM){
-                    mCurrentPosition = (mCurrentPosition + (int)(1+Math.random()*(20-1+1)))%12;
-                    changeMusic(mCurrentPosition);
-                }else if (playModel == PLAY_SINGLE){
-                    changeMusic(mCurrentPosition);
+                    firstClick = false;
+                }else {
+                    if (playModel == PLAY_IN_ORDER){
+                        changeMusic(++mCurrentPosition);
+                    }else if (playModel == PLAY_RANDOM){
+                        mCurrentPosition = (mCurrentPosition + (int)(1+Math.random()*(20-1+1)))%12;
+                        changeMusic(mCurrentPosition);
+                    }else if (playModel == PLAY_SINGLE){
+                        changeMusic(mCurrentPosition);
+                    }
                 }
+                playMusic = true;
                 break;
             case R.id.music_selected_player_list:
                 chooseMusic.openDrawer(GravityCompat.START);//打开drawlayout滑动菜单
@@ -562,17 +647,17 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
             // 切歌之前先重置，释放掉之前的资源
             mediaPlayer.reset();
             // 设置播放源
-            Log.d("Music", mList.get(position).path);
+//            Log.d("Music", mList.get(position).path);
             mediaPlayer.setDataSource(mList.get(position).path);
 
-//            tvPlaySongInfo.setText("歌名： " + mList.get(position).song + "   歌手： " + mList.get(position).singer);
+            //动态展示当前歌曲信息
             musicInfo.setText(mList.get(position).song + " - " +mList.get(position).singer);
             musicSongName.setText(mList.get(position).song);
             musicSingerName.setText(mList.get(position).singer);
 
             //使用ImageBitmap来加载专辑图片
-            albumImg.setImageBitmap(MusicUtils.getAlbumPicture(MyApplication.getContext(),mList.get(position).getPath()));
-            musicAlbumArt.setImageBitmap(MusicUtils.getAlbumPicture(MyApplication.getContext(),mList.get(position).getPath()));
+            albumImg.setImageBitmap(MusicUtils.setArtwork(this,mList.get(position).getPath(),albumImg));
+            musicAlbumArt.setImageBitmap(MusicUtils.setArtwork(MyApplication.getContext(),mList.get(position).getPath(),musicAlbumArt));
 
             // 开始播放前的准备工作，加载多媒体资源，获取相关信息
             mediaPlayer.prepare();
@@ -581,24 +666,21 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
         } catch (IOException e) {
             e.printStackTrace();
         }
-
         musicTimeSeekBar.setProgress(0);
         musicTimeSeekBar.setMax(mediaPlayer.getDuration());
         musicTotalTime.setText(parseTime(mediaPlayer.getDuration()));
-
         updateProgress();
+
         if (mediaPlayer.isPlaying()) {
             musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
             btnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
-//            playStateImg.setBackground(getResources().getDrawable(R.mipmap.icon_play));
         } else {
             musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_pause));
             btnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_pause));
-//            playStateImg.setBackground(getResources().getDrawable(R.mipmap.icon_pause));
         }
     }
 
-    private void updateProgress() {
+    public void updateProgress() {
         // 使用Handler每间隔1s发送一次空消息，通知进度条更新
         Message msg = Message.obtain();// 获取一个现成的消息
         // 使用MediaPlayer获取当前播放时间除以总时间的进度
@@ -616,7 +698,7 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
 
         @Override
         public void onStartTrackingTouch(SeekBar seekBar) {
-            musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_pause));
+//            musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_pause));
         }
 
         // 当手停止拖拽进度条时执行该方法
@@ -624,19 +706,31 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
         // 将进度对应设置给MediaPlayer
         @Override
         public void onStopTrackingTouch(SeekBar seekBar) {
-            int progress = seekBar.getProgress();
-            mediaPlayer.seekTo(progress);
+//            int progress = seekBar.getProgress();
+//            mediaPlayer.seekTo(progress);
             if (playMusic == true){
                 mediaPlayer.start();
             }else {
-                mediaPlayer.start();
-                musicBtnPlayOrPause.setBackground(getResources().getDrawable(R.mipmap.music_play));
+                if (mediaPlayer == null){
+                    changeMusic(0);
+                    firstClick = false;
+                    changeTextColor = true;
+                }else {
+                    mediaPlayer.start();
+                }
+                btnPlayOrPause.setBackgroundResource(R.mipmap.music_play);
+                musicBtnPlayOrPause.setBackgroundResource(R.mipmap.music_play);
+                playMusic = true;
             }
+            int progress = seekBar.getProgress();
+            mediaPlayer.seekTo(progress);
+            mAdapter.notifyDataSetChanged();
+            useMusicListActivity();
         }
     };
 
     /**
-     * 加载天气App背景图片，该背景图片每日都会自动更换
+     * 加载背景图片，该背景图片每日都会自动更换
      * */
     private void loadBingPic() {
         String requestBingPic = "http://guolin.tech/api/bing_pic";
@@ -675,6 +769,9 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
         }else if (playModel == PLAY_SINGLE){
             changeMusic(mCurrentPosition);
         }
+        changeTextColor = true;
+        mAdapter.notifyDataSetChanged();
+        useMusicListActivity();
     }
 
     @Override
@@ -686,6 +783,8 @@ public class MainActivity extends AppCompatActivity implements MediaPlayer.OnCom
     @Override
     protected void onDestroy(){
         super.onDestroy();
-        ActivityCollector.removeActivity(this);
+        unbindService(connection);
+        System.exit(0);
+//        ActivityCollector.removeActivity(this);
     }
 }
